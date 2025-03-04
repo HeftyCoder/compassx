@@ -27,7 +27,7 @@ class App extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineSmall!,
           child: Center(
             child: StreamBuilder<CompassXEvent>(
-              stream: CompassX.events,
+              stream: CompassX.magneticHeadingEvents,
               builder: (context, snapshot) {
                 if (snapshot.hasError) return Text(snapshot.error.toString());
                 if (!snapshot.hasData) return const CircularProgressIndicator();

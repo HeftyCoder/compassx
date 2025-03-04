@@ -9,11 +9,19 @@ import 'package:flutter/foundation.dart';
 final class CompassX {
   const CompassX._();
 
-  /// [CompassXEvent] stream for using the compass sensor.
+  /// [CompassXEvent] stream for using the magnetic compass sensor.
   ///
   /// Throw [CompassXException] when the compass sensor is not available.
   /// That includes the following cases.
   /// - Older or excessively cheap Android devices.
   /// - iOS simulators.
-  static Stream<CompassXEvent> get events => CompassXPlatform.events;
+  static Stream<CompassXEvent> get magneticHeadingEvents => CompassXPlatform.magneticHeadingEvents;
+
+  /// [CompassXEvent] stream for using the true heading compass sensor.
+  ///
+  /// Throw [CompassXException] when the compass sensor is not available.
+  /// That includes the following cases.
+  /// - Older or excessively cheap Android devices.
+  /// - iOS simulators.
+  static Stream<CompassXEvent> get trueHeadingEvents => CompassXPlatform.trueHeadingEvents;
 }

@@ -8,19 +8,31 @@ import 'package:flutter/services.dart';
 final class CompassXPlatform {
   const CompassXPlatform._();
 
-  /// The [EventChannel] used for receiving events from the native side.
-  static const _channel = EventChannel("studio.midoridesign/compassx");
+  /// The [EventChannel] used for receiving magnetic heading events.
+  static const _mangeticHeadingChannel = EventChannel("studio.midoridesign/compassx/magnetic_heading");
+  /// The [EventChannel] used for receiving true heading events.
+  static const _trueHeadingChannel = EventChannel("studio.midoridesign/compassx/true_heading");
 
-  /// The stream used for receiving events from the native side.
-  static final _stream = _channel.receiveBroadcastStream();
+  static final _magneticHeadingStream = _mangeticHeadingChannel.receiveBroadcastStream();
+  static final _trueHeadingStream = _trueHeadingChannel.receiveBroadcastStream(); 
 
   /// CompassXEvent stream for [CompassX].
-  static Stream<CompassXEvent> get events =>
-      _stream.map(CompassXEvent.fromMap).handleError(
+  static Stream<CompassXEvent> get magneticHeadingEvents =>
+      _magneticHeadingStream.map(CompassXEvent.fromMap).handleError(
             (e, st) => throw CompassXException.fromPlatformException(
               platformException: e,
               stackTrace: st,
             ),
             test: (e) => e is PlatformException,
           );
+  
+  static Stream<CompassXEvent> get trueHeadingEvents =>
+      _trueHeadingStream.map(CompassXEvent.fromMap).handleError(
+            (e, st) => throw CompassXException.fromPlatformException(
+              platformException: e,
+              stackTrace: st,
+            ),
+            test: (e) => e is PlatformException,
+          );
+        
 }
