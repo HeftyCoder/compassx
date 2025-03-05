@@ -15,9 +15,9 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -30,8 +30,6 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 
 import java.util.HashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-
 final class HelperFunctions {
     static final String logName = "CompassX";
     static void passHeading(EventChannel.EventSink events, HeadingProvider headingProvider) {
@@ -83,7 +81,10 @@ class RotationSensorHeading extends BaseHeading implements SensorEventListener, 
     Sensor rotationSensor;
     EventChannel.EventSink events;
     float declination = 0;
+    /// Accounts for device orientation, if it exists
     float[] rotationMatrix = new float[9];
+    /// Helps when display is available
+    float[] tempRotationMatrix = new float[9];
     float[] orientationAngles = new float[3];
 
     // The location manager needs to be known in order to
@@ -102,17 +103,12 @@ class RotationSensorHeading extends BaseHeading implements SensorEventListener, 
         // A random init value to start the stream
         heading = -1000;
 
-        locationListener = new LocationListener() {
-            @Override
-            public void onLocationChanged(@NonNull Location location) {
-                declination = new GeomagneticField(
-                        (float) location.getLatitude(),
-                        (float) location.getLongitude(),
-                        (float) location.getAltitude(),
-                        System.currentTimeMillis()
-                ).getDeclination();
-            }
-        };
+        locationListener = location -> declination = new GeomagneticField(
+                (float) location.getLatitude(),
+                (float) location.getLongitude(),
+                (float) location.getAltitude(),
+                System.currentTimeMillis()
+        ).getDeclination();
     }
     @Override
     public void dispose() {
@@ -133,7 +129,29 @@ class RotationSensorHeading extends BaseHeading implements SensorEventListener, 
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
         SensorManager.getOrientation(rotationMatrix, orientationAngles);
 
-        float azimuth = (float) Math.toDegrees(orientationAngles[0]);
+        // Google Play Services also implements something similar (I assume)
+
+        // The android specification defines Y axis as the pointer to North. People
+        // tend to hold smartphones in Portrait mode (aka selfie mode) or Portrait mode
+        // with the back of the phone looking at the ground. This indicates that we would
+        // like both the top of the phone and the back to point North.
+        // To achieve this, we remap the coordinates (switch Y and X axis)
+        // so that the right side of the phone (if looked at) will indicate where North is.
+        // Doing so, the wo typical phone positions don't affect the pointer to North.
+        // We then need to subtract 90 degrees from the result to offset the pointer to be
+        // parallel to the new X-Z plane (Ynew-Znew), so that the plane will point to North
+        // instead of the right side of the phone.
+        SensorManager.remapCoordinateSystem(
+                rotationMatrix,
+                SensorManager.AXIS_Y,
+                SensorManager.AXIS_X,
+                tempRotationMatrix);
+        System.arraycopy(tempRotationMatrix, 0, rotationMatrix, 0, rotationMatrix.length);
+        SensorManager.getOrientation(rotationMatrix, orientationAngles);
+
+        // Subtracting 90 as explained above.
+        float azimuth = (float) Math.toDegrees(orientationAngles[0]) - 90;
+        Log.i(HelperFunctions.logName, ""+declination);
         float newHeading = (azimuth + declination + 360) % 360;
         float accuracyRadian = event.values[4];
         float newAcc =
@@ -170,7 +188,12 @@ class RotationSensorHeading extends BaseHeading implements SensorEventListener, 
 
         // Arbitrarily large minTime to avoid battery usage
         if (locationManager != null) {
-            String provider = locationManager.hasProvider(LocationManager.FUSED_PROVIDER) ? LocationManager.FUSED_PROVIDER : LocationManager.GPS_PROVIDER;
+            String provider;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                provider = locationManager.hasProvider(LocationManager.FUSED_PROVIDER) ? LocationManager.FUSED_PROVIDER : LocationManager.GPS_PROVIDER;
+            } else {
+                provider = LocationManager.GPS_PROVIDER;
+            }
             locationManager.requestLocationUpdates(provider, 300000L, 10f, this.locationListener);
         }
 
@@ -256,6 +279,7 @@ class GooglePlayHeading extends BaseHeading implements DeviceOrientationListener
             orientationProviderClient = LocationServices.getFusedOrientationProviderClient(activity);
         }
         this.executor = executor;
+        this.request = request;
     }
     @Override
     public void dispose() {
@@ -294,6 +318,7 @@ class GooglePlayHeading extends BaseHeading implements DeviceOrientationListener
 
     @Override
     public void onCancel(Object arguments) {
+        Log.i(HelperFunctions.logName, "CANCELLED STREAM");
         if (orientationProviderClient == null) return;
         orientationProviderClient.removeOrientationUpdates(this);
     }
@@ -319,16 +344,21 @@ public class CompassXPlugin implements FlutterPlugin, ActivityAware {
     }
 
     @Override
-    public void onDetachedFromEngine(FlutterPlugin.FlutterPluginBinding binding) {
+    public void onDetachedFromEngine(@NonNull FlutterPlugin.FlutterPluginBinding binding) {
         magneticHeadingChannel.setStreamHandler(null);
         trueHeadingChannel.setStreamHandler(null);
         cleanup();
     }
     @Override
     public void onAttachedToActivity(ActivityPluginBinding binding) {
+        Log.i(HelperFunctions.logName, "GOOGLE");
         activity = binding.getActivity();
         var rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
-        var headingSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEADING);
+
+        Sensor headingSensor = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            headingSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEADING);
+        }
 
         magneticHeading = new RotationSensorHeading(
                 sensorManager,
@@ -372,7 +402,7 @@ public class CompassXPlugin implements FlutterPlugin, ActivityAware {
         cleanup();
     }
     @Override
-    public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
+    public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
         onAttachedToActivity(binding);
     }
     @Override

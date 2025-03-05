@@ -21,44 +21,67 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double size = 100;
     return MaterialApp(
       home: Scaffold(
-        body: DefaultTextStyle(
-          style: Theme.of(context).textTheme.headlineSmall!,
-          child: Center(
-            child: StreamBuilder<CompassXEvent>(
-              stream: CompassX.magneticHeadingEvents,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) return Text(snapshot.error.toString());
-                if (!snapshot.hasData) return const CircularProgressIndicator();
-                final compass = snapshot.data!;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Heading: ${compass.heading}'),
-                    Text('Accuracy: ${compass.accuracy}'),
-                    Text('Should calibrate: ${compass.shouldCalibrate}'),
-                    Transform.rotate(
-                      angle: compass.heading * math.pi / 180,
-                      child: Icon(
-                        Icons.arrow_upward_rounded,
-                        size: MediaQuery.of(context).size.width - 80,
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: () async {
-                        if (!Platform.isAndroid) return;
-                        await Permission.location.request();
-                      },
-                      child: const Text('Request permission'),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
+        body: Center(
+          child: DefaultTextStyle(
+              style: Theme.of(context).textTheme.titleMedium!,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  CompassWidget(
+                    stream: CompassX.magneticHeadingEvents,
+                    size: size,
+                  ),
+                  CompassWidget(
+                    stream: CompassX.trueHeadingEvents,
+                    size: size,
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      if (!Platform.isAndroid) return;
+                      await Permission.location.request();
+                    },
+                    child: const Text('Request permission'),
+                  )
+                ],
+              )),
         ),
       ),
+    );
+  }
+} //
+
+class CompassWidget extends StatelessWidget {
+  final Stream<CompassXEvent> stream;
+  final double size;
+  const CompassWidget({super.key, required this.stream, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Text(snapshot.error.toString());
+        if (!snapshot.hasData) return const CircularProgressIndicator();
+        final compass = snapshot.data!;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Heading: ${compass.heading}'),
+            Text('Accuracy: ${compass.accuracy}'),
+            Text('Should calibrate: ${compass.shouldCalibrate}'),
+            Transform.rotate(
+              angle: compass.heading * math.pi / 180,
+              child: Icon(
+                Icons.arrow_upward_rounded,
+                size: size,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
