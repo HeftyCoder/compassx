@@ -151,7 +151,6 @@ class RotationSensorHeading extends BaseHeading implements SensorEventListener, 
 
         // Subtracting 90 as explained above.
         float azimuth = (float) Math.toDegrees(orientationAngles[0]) - 90;
-        Log.i(HelperFunctions.logName, ""+declination);
         float newHeading = (azimuth + declination + 360) % 360;
         float accuracyRadian = event.values[4];
         float newAcc =
